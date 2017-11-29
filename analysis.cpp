@@ -64,9 +64,7 @@ static int numa_nodes = 4;
 static const char envname_page_size[] = "PIN_PAGE_SIZE_BYTES";
 static const char envname_numa_nodes[] = "PIN_NUMA_NODES";
 
-char addr_fname[1024];
-char stat_fname[1024];
-
+char pinapp[1024];
 // *****************************************************
 
 inline UINT64 getTSC()
@@ -324,8 +322,9 @@ static void print_pgtb ()
 	UINT64 i, j, naccesses = 0;
 	pte_t *pte;
 	ofstream file;
-	
-	file.open(addr_fname);
+	std::string f = "output/addr." + std::string(pinapp) + ".csv";
+	const char *cf = f.c_str();
+	file.open(cf);
 	
 	file << "id,";
 	file << "pgaddr,";
@@ -375,8 +374,9 @@ VOID Fini(INT32 code, VOID *v)
 	cout << "total threads " << numThreads << endl << endl;
 
 	// calculate statistics
-	
-	stats_file.open(stat_fname);
+	std::string f = "output/stat." + std::string(pinapp) + ".txt";
+	const char *cf = f.c_str();
+	stats_file.open(cf);
 
 	PRINT_STATS( "Number of threads: " << numThreads << endl )
 //	PRINT_STATS( "TLB number of entries: " << tlb_n_entries << endl )
@@ -478,6 +478,16 @@ VOID ThreadStart(THREADID threadid, CONTEXT *ctxt, INT32 flags, VOID *v)
 	
 	pintid_to_ktid[threadid] = tid;
 	ktids[i] = tid;
+
+	sprintf(fname, "/proc/%i/comm", tid);
+	fp = fopen(fname, "r");
+	if (!fp) {
+		cout << "error opening " << fname << endl;
+		exit(1);
+	}
+	fscanf(fp, "%s", pinapp);
+	fclose(fp);
+
 	
 	sprintf(fname, "/proc/track-processes/%i", tid);
 	fp = fopen(fname, "r");
@@ -507,21 +517,6 @@ int main(int argc, char *argv[])
 {
 	int i;
 	char *env;
-	char hostname[HOST_NAME_MAX + 1], hostdate[1024]; 
-	//struct stat st = {0};
-	time_t t;
-
-	time(&t);
-	strftime(hostdate, 1023, "%d.%m.%Y.%H.%M.%S", localtime(&t));
-	gethostname(hostname, HOST_NAME_MAX);
-	sprintf(addr_fname, "output/addr.%s.%s.csv", hostname, hostdate);
-	sprintf(stat_fname, "output/stat.%s.%s.txt", hostname, hostdate);
-
-//	if(stat("output", &st) == -1)
-  //  	if(mkdir("output", 0700) == -1){
-    //		fprintf(stderr, "error creating output directory\n");
-//			exit(EXIT_FAILURE);
-//    	}	
 	
 	if (PIN_Init(argc,argv)) {
 		printf("pintool error\n");
