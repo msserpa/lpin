@@ -107,6 +107,7 @@ static inline UINT32 hash_32(UINT32 val, unsigned int bits)
 
 struct pte_t {
 	UINT64 vaddr;
+	long long int ts;
 	pte_thread_t thread[MAX_THREADS];
 	
 	pte_t() {
@@ -119,6 +120,13 @@ struct pte_t {
 		}
 	}
 };
+
+long long int unix_timestamp()  
+{
+    time_t t = std::time(0);
+    long long int now = static_cast<long long int> (t);
+    return now;
+}
 
 static int get_n_bits(UINT64 v)
 {
@@ -220,28 +228,28 @@ class page_table_t
 			pte_t *a = (pte_t*)a_;
 			pte_t *b = (pte_t*)b_;
 			
-			if (a->vaddr == 0) {
-				if (b->vaddr == 0)
-					return 0;
-				else
-					return 1;
-			}
-			else {
-				if (b->vaddr == 0)
-					return -1;
-				else {
-					if (a->vaddr < b->vaddr)
-						return -1;
-					else if (a->vaddr > b->vaddr)
-						return 1;
-					else
-						return 0;
-				}
-			}
+			// if (a->vaddr == 0) {
+			// 	if (b->vaddr == 0)
+			// 		return 0;
+			// 	else
+			// 		return 1;
+			// }
+			// else {
+			// 	if (b->vaddr == 0)
+			// 		return -1;
+			// 	else {
+			// 		if (a->vaddr < b->vaddr)
+			// 			return -1;
+			// 		else if (a->vaddr > b->vaddr)
+			// 			return 1;
+			// 		else
+			// 			return 0;
+			// 	}
+			// }
 			
-//			if ( *(MyType*)a <  *(MyType*)b ) return -1;
-//			if ( *(MyType*)a == *(MyType*)b ) return 0;
-//			if ( *(MyType*)a >  *(MyType*)b ) return 1;
+			if ( *(long long int *)a->ts <  *(long long int*)b->ts ) return -1;
+			if ( *(long long int*)a->ts == *(long long int*)b->ts ) return 0;
+			if ( *(long long int*)a->ts >  *(long long int*)b->ts ) return 1;
 		}
 		
 		void sort () {
@@ -294,6 +302,7 @@ class page_table_t
 			else {
 				pte = &(this->storage[free]);
 				pte->vaddr = page_addr;
+				pte->ts = unix_timestamp();
 				npages++;
 			}
 			
