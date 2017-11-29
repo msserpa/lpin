@@ -107,25 +107,24 @@ static inline UINT32 hash_32(UINT32 val, unsigned int bits)
 
 struct pte_t {
 	UINT64 vaddr;
-	long long int ts;
+	UINT64 ts;
 	pte_thread_t thread[MAX_THREADS];
 	
 	pte_t() {
 		int i;
 		
 		this->vaddr = 0;
-		
+		this->ts = 0;	
 		for (i=0; i<MAX_THREADS; i++) {
 			this->thread[i].naccess = 0;
 		}
 	}
 };
 
-long long int unix_timestamp()  
+UINT64 unix_timestamp()  
 {
-    time_t t = std::time(0);
-    long long int now = static_cast<long long int> (t);
-    return now;
+    static UINT64 i;
+    return i++;
 }
 
 static int get_n_bits(UINT64 v)
@@ -187,7 +186,7 @@ class page_table_t
 			cout << "System memory: " << (info.totalram / (1024*1024)) << "MB" << endl;
 			cout << "Free memory: " << (info.freeram / (1024*1024)) << "MB" << endl;
 			
-			max_el = ((info.totalram * 8) / 10) / sizeof(pte_t); // target using 70% of available RAM
+			max_el = ((info.freeram * 1) / 2) / sizeof(pte_t); // target using 50% of free RAM
 			max_el = get_highest_power2(max_el);
 			
 			cout << "max_el: " << max_el << endl;
@@ -228,28 +227,29 @@ class page_table_t
 			pte_t *a = (pte_t*)a_;
 			pte_t *b = (pte_t*)b_;
 			
-			// if (a->vaddr == 0) {
-			// 	if (b->vaddr == 0)
-			// 		return 0;
-			// 	else
-			// 		return 1;
-			// }
-			// else {
-			// 	if (b->vaddr == 0)
-			// 		return -1;
-			// 	else {
-			// 		if (a->vaddr < b->vaddr)
-			// 			return -1;
-			// 		else if (a->vaddr > b->vaddr)
-			// 			return 1;
-			// 		else
-			// 			return 0;
-			// 	}
-			// }
+			 if (a->ts == 0) {
+			 	if (b->ts == 0)
+			 		return 0;
+			 	else
+			 		return 1;
+			 }
+			 else {
+			 	if (b->ts == 0)
+			 		return -1;
+			 	else {
+			 		if (a->ts < b->ts)
+			 			return -1;
+			 		else if (a->ts > b->ts)
+						return 1;
+			 		else
+			 			return 0;
+			 	}
+			 }
 			
-			if ( *(long long int *)a->ts <  *(long long int*)b->ts ) return -1;
-			if ( *(long long int*)a->ts == *(long long int*)b->ts ) return 0;
-			if ( *(long long int*)a->ts >  *(long long int*)b->ts ) return 1;
+			//if ( *(long long int *)a->ts <  *(long long int*)b->ts ) return -1;
+			//if ( *(long long int*)a->ts == *(long long int*)b->ts ) return 0;
+			//if ( *(long long int*)a->ts >  *(long long int*)b->ts ) return 1;
+			return 0;
 		}
 		
 		void sort () {
@@ -329,6 +329,7 @@ static void print_pgtb ()
 	
 	file << "id,";
 	file << "pgaddr,";
+	file << "timestamp,";
 	for (j=0; j<numThreads; j++)
 		file << "t" << j << ",";
 	file << "accesses";
@@ -338,6 +339,7 @@ static void print_pgtb ()
 	for (i=0, pte=page_table.get_vector(); page_table.valid(i); i++, pte++) {
 		file << i << ",";
 		file << pte->vaddr << ",";
+		file << pte->ts << ",";
 		
 		for (j=0; j<numThreads; j++){
 			file << pte->thread[j].naccess << ",";
@@ -506,7 +508,7 @@ int main(int argc, char *argv[])
 	int i;
 	char *env;
 	char hostname[HOST_NAME_MAX + 1], hostdate[1024]; 
-	struct stat st = {0};
+	//struct stat st = {0};
 	time_t t;
 
 	time(&t);
@@ -515,11 +517,11 @@ int main(int argc, char *argv[])
 	sprintf(addr_fname, "output/addr.%s.%s.csv", hostname, hostdate);
 	sprintf(stat_fname, "output/stat.%s.%s.txt", hostname, hostdate);
 
-	if(stat("output", &st) == -1)
-    	if(mkdir("output", 0700) == -1){
-    		fprintf(stderr, "error creating output directory\n");
-			exit(EXIT_FAILURE);
-    	}	
+//	if(stat("output", &st) == -1)
+  //  	if(mkdir("output", 0700) == -1){
+    //		fprintf(stderr, "error creating output directory\n");
+//			exit(EXIT_FAILURE);
+//    	}	
 	
 	if (PIN_Init(argc,argv)) {
 		printf("pintool error\n");
