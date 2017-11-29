@@ -14,7 +14,7 @@
 #include <assert.h>
 #include <string.h>
 #include <unistd.h>
-#include <string>
+
 #include "pin.H"
 
 #ifndef HOST_NAME_MAX
@@ -66,7 +66,7 @@ static const char envname_numa_nodes[] = "PIN_NUMA_NODES";
 
 char addr_fname[1024];
 char stat_fname[1024];
-char pinapp[1024];
+
 // *****************************************************
 
 inline UINT64 getTSC()
@@ -157,15 +157,15 @@ static UINT64 get_highest_power2 (UINT64 max)
 class page_table_t
 {
 	private:
-		vector<pte_t> storage;
+		pte_t *storage;
 		PIN_LOCK lock;
-		// int page_table_size_bits;
-		// int page_table_sets_bits;
-		//size_t size;
+		int page_table_size_bits;
+		int page_table_sets_bits;
+		size_t size;
 
 	public:
 		page_table_t() {
-			// UINT64 max_el;
+			UINT64 max_el;
 			struct sysinfo info;
 			
 			if (sysinfo(&info)) {
@@ -179,147 +179,127 @@ class page_table_t
 			cout << "System memory: " << (info.totalram / (1024*1024)) << "MB" << endl;
 			cout << "Free memory: " << (info.freeram / (1024*1024)) << "MB" << endl;
 			
-		// 	max_el = ((info.totalram * 8) / 10) / sizeof(pte_t); // target using 70% of available RAM
-		// 	max_el = get_highest_power2(max_el);
+			max_el = ((info.totalram * 8) / 10) / sizeof(pte_t); // target using 70% of available RAM
+			max_el = get_highest_power2(max_el);
 			
-		// 	cout << "max_el: " << max_el << endl;
+			cout << "max_el: " << max_el << endl;
 			
-		// 	if (max_el >= 4)
-		// 		page_table_sets_bits = 2;
-		// 	else
-		// 		page_table_sets_bits = 0;
+			if (max_el >= 4)
+				page_table_sets_bits = 2;
+			else
+				page_table_sets_bits = 0;
 			
-		// #if defined(__ia64)
-		// 	page_table_size_bits = MAX_ELEMENTS_BITS;
-		// #else
-		// 	page_table_size_bits = get_n_bits(max_el) - page_table_sets_bits;
-		// #endif
+		#if defined(__ia64)
+			page_table_size_bits = MAX_ELEMENTS_BITS;
+		#else
+			page_table_size_bits = get_n_bits(max_el) - page_table_sets_bits;
+		#endif
 			
-		// 	cout << "page_table_size_bits: " << page_table_size_bits << endl;
-		// 	cout << "page_table_sets_bits: " << page_table_sets_bits << endl;
+			cout << "page_table_size_bits: " << page_table_size_bits << endl;
+			cout << "page_table_sets_bits: " << page_table_sets_bits << endl;
 			
-			//size = 1 << (page_table_size_bits+page_table_sets_bits);
+			size = 1 << (page_table_size_bits+page_table_sets_bits);
 			
-			//cout << "Trying to allocate " << size << " elements using " << ((size*sizeof(pte_t)) / (1024*1024)) << "MB" << endl;
+			cout << "Trying to allocate " << size << " elements using " << ((size*sizeof(pte_t)) / (1024*1024)) << "MB" << endl;
 			
-			//this->storage = new pte_t[ size ];
+			this->storage = new pte_t[ size ];
 			
-			// cout << "Memory allocated" << endl;
+			cout << "Memory allocated" << endl;
 			PIN_InitLock(&this->lock);
 		}
 		
-		// inline size_t get_size () {
-		// 	return this->size;
-		// }
+		inline size_t get_size () {
+			return this->size;
+		}
 		
-		// inline pte_t* get_vector () {
-		// 	return this->storage;
-		// }
+		inline pte_t* get_vector () {
+			return this->storage;
+		}
 
-// 		static int compare (const void *a_, const void *b_) {
-// 			pte_t *a = (pte_t*)a_;
-// 			pte_t *b = (pte_t*)b_;
+		static int compare (const void *a_, const void *b_) {
+			pte_t *a = (pte_t*)a_;
+			pte_t *b = (pte_t*)b_;
 			
-// 			if (a->vaddr == 0) {
-// 				if (b->vaddr == 0)
-// 					return 0;
-// 				else
-// 					return 1;
-// 			}
-// 			else {
-// 				if (b->vaddr == 0)
-// 					return -1;
-// 				else {
-// 					if (a->vaddr < b->vaddr)
-// 						return -1;
-// 					else if (a->vaddr > b->vaddr)
-// 						return 1;
-// 					else
-// 						return 0;
-// 				}
-// 			}
-			
-// //			if ( *(MyType*)a <  *(MyType*)b ) return -1;
-// //			if ( *(MyType*)a == *(MyType*)b ) return 0;
-// //			if ( *(MyType*)a >  *(MyType*)b ) return 1;
-// 		}
-		
-		// void sort () {
-		// 	qsort(this->storage, size, sizeof(pte_t), &page_table_t::compare);
-		// }
-		
-		// int valid (UINT64 i) {
-		// 	return (i < this->size && this->storage[i].vaddr != 0);
-		// }
-		
-		void fetch (UINT64 page_addr, int tid){
-			int i;
-			bool found = false;
-
-			PIN_GetLock(&this->lock, 1);
-			for(i = 0; i != this->storage.size(); i++)
-				if(this->storage[i].vaddr == page_addr){
-					found = true;
-					break;
-				}
-
-			if(found == false){
-				this->storage.push_back();
-				this->storage.at(i).vaddr = page_addr;
+			if (a->vaddr == 0) {
+				if (b->vaddr == 0)
+					return 0;
+				else
+					return 1;
 			}
-
-			this->storage.at(i).thread[tid]++;
-
+			else {
+				if (b->vaddr == 0)
+					return -1;
+				else {
+					if (a->vaddr < b->vaddr)
+						return -1;
+					else if (a->vaddr > b->vaddr)
+						return 1;
+					else
+						return 0;
+				}
+			}
+			
+//			if ( *(MyType*)a <  *(MyType*)b ) return -1;
+//			if ( *(MyType*)a == *(MyType*)b ) return 0;
+//			if ( *(MyType*)a >  *(MyType*)b ) return 1;
+		}
+		
+		void sort () {
+			qsort(this->storage, size, sizeof(pte_t), &page_table_t::compare);
+		}
+		
+		int valid (UINT64 i) {
+			return (i < this->size && this->storage[i].vaddr != 0);
+		}
+		
+		pte_t* fetch (UINT64 page_addr, int tid) {
+			UINT32 hash, pos, i;
+			INT64 free;
+			pte_t *pte;
+			
+			hash = hash_32(page_addr >> page_size_bits, page_table_size_bits);
+			pos = hash << page_table_sets_bits;
+			
+			free = 0;
+			for (i=pos; i<pos+(1<<page_table_sets_bits); i++) {
+				if (this->storage[i].vaddr == page_addr)
+					return &(this->storage[i]);
+				free += (this->storage[i].vaddr == 0);
+			}
+			
+			if (!free)    // no free space in the set
+				return NULL;
+			
+			// page never accessed before?
+			
+			if (tid == -1)
+				return NULL;
+			
+			PIN_GetLock(&this->lock, 1);
+			
+			// check again in case of a race condition
+			
+			free = -1;
+			for (i=pos; i<pos+(1<<page_table_sets_bits); i++) {
+				if (this->storage[i].vaddr == page_addr) {
+					PIN_ReleaseLock(&this->lock);
+					return &(this->storage[i]);
+				}
+				if (this->storage[i].vaddr == 0 && free == -1)
+					free = i;
+			}
+			
+			if (free == -1)
+				pte = NULL;
+			else {
+				pte = &(this->storage[free]);
+				pte->vaddr = page_addr;
+				npages++;
+			}
+			
 			PIN_ReleaseLock(&this->lock);
-
-
-			// UINT32 hash, pos, i;
-			// INT64 free;
-			// pte_t *pte;
 			
-			// hash = hash_32(page_addr >> page_size_bits, page_table_size_bits);
-			// pos = hash << page_table_sets_bits;
-			
-			// free = 0;
-			// for (i=pos; i<pos+(1<<page_table_sets_bits); i++) {
-			// 	if (this->storage[i].vaddr == page_addr)
-			// 		return &(this->storage[i]);
-			// 	free += (this->storage[i].vaddr == 0);
-			// }
-			
-			// if (!free)    // no free space in the set
-			// 	return NULL;
-			
-			// // page never accessed before?
-			
-			// if (tid == -1)
-			// 	return NULL;
-			
-			// PIN_GetLock(&this->lock, 1);
-			
-			// // check again in case of a race condition
-			
-			// free = -1;
-			// for (i=pos; i<pos+(1<<page_table_sets_bits); i++) {
-			// 	if (this->storage[i].vaddr == page_addr) {
-			// 		PIN_ReleaseLock(&this->lock);
-			// 		return &(this->storage[i]);
-			// 	}
-			// 	if (this->storage[i].vaddr == 0 && free == -1)
-			// 		free = i;
-			// }
-			
-			// if (free == -1)
-			// 	pte = NULL;
-			// else {
-			// 	pte = &(this->storage[free]);
-			// 	pte->vaddr = page_addr;
-			// 	npages++;
-			// }
-			
-			// PIN_ReleaseLock(&this->lock);
-			
-			//return pte;
+			return pte;
 		}
 };
 
@@ -335,9 +315,8 @@ static void print_pgtb ()
 	UINT64 i, j, naccesses = 0;
 	pte_t *pte;
 	ofstream file;
-	std::string f = "output/" + std::string(pinapp) + "." + std::string(addr_fname);
-	const char *cf = f.c_str();
-	file.open(cf);
+	
+	file.open(addr_fname);
 	
 	file << "id,";
 	file << "pgaddr,";
@@ -373,27 +352,20 @@ VOID Fini(INT32 code, VOID *v)
 	double diff_time;
 	ofstream stats_file;
 	static struct timeval sort_time_stamp;
-<<<<<<< HEAD
-	std::string f = "output/" + std::string(pinapp) + "." + std::string(stat_fname);
-	const char *cf = f.c_str();
+	
 	gettimeofday(&timer_end, NULL);
 	diff_time = calc_diff(&timer_start, &timer_end);
-=======
 	
-	//gettimeofday(&timer_end, NULL);
-	//diff_time = calc_diff(&timer_start, &timer_end);
->>>>>>> 8411496ecacb8604bd3b92d20c9cdf47fed2bb2c
-	
-	//cout << "sorting page table..." << endl;
-	//page_table.sort();
-	//gettimeofday(&sort_time_stamp, NULL);
-	//cout << "sorting took " << calc_diff(&timer_end, &sort_time_stamp) << " seconds" << endl;
+	cout << "sorting page table..." << endl;
+	page_table.sort();
+	gettimeofday(&sort_time_stamp, NULL);
+	cout << "sorting took " << calc_diff(&timer_end, &sort_time_stamp) << " seconds" << endl;
 	
 	cout << "total threads " << numThreads << endl << endl;
 
 	// calculate statistics
 	
-	stats_file.open(cf);
+	stats_file.open(stat_fname);
 
 	PRINT_STATS( "Number of threads: " << numThreads << endl )
 //	PRINT_STATS( "TLB number of entries: " << tlb_n_entries << endl )
@@ -438,13 +410,13 @@ static VOID memaccess(BOOL is_Read, ADDRINT pc, ADDRINT addr, INT32 size, THREAD
 	
 	addr = addr & page_mask;
 	
-	page_table.fetch(addr, threadid);
-	// if (!tentry) {
-	// 	hash_fail++;
-	// 	return;
-	// }
+	tentry = page_table.fetch(addr, threadid);
+	if (!tentry) {
+		hash_fail++;
+		return;
+	}
 
-	// tentry->thread[threadid].naccess++;
+	tentry->thread[threadid].naccess++;
 }
 
 VOID trace_memory(INS ins, VOID *v)
@@ -496,16 +468,6 @@ VOID ThreadStart(THREADID threadid, CONTEXT *ctxt, INT32 flags, VOID *v)
 	pintid_to_ktid[threadid] = tid;
 	ktids[i] = tid;
 	
-	sprintf(fname, "/proc/%i/comm", tid);
-	fp = fopen(fname, "r");
-	if (!fp) {
-		cout << "error opening " << fname << endl;
-		exit(1);
-	}
-	fscanf(fp, "%s", pinapp);
-	fclose(fp);
-
-
 	sprintf(fname, "/proc/track-processes/%i", tid);
 	fp = fopen(fname, "r");
 	if (!fp) {
@@ -535,20 +497,20 @@ int main(int argc, char *argv[])
 	int i;
 	char *env;
 	char hostname[HOST_NAME_MAX + 1], hostdate[1024]; 
-//	struct stat st = {0};
+	struct stat st = {0};
 	time_t t;
 
 	time(&t);
 	strftime(hostdate, 1023, "%d.%m.%Y.%H.%M.%S", localtime(&t));
 	gethostname(hostname, HOST_NAME_MAX);
-	sprintf(addr_fname, "addr.%s.%s.csv", hostname, hostdate);
-	sprintf(stat_fname, "stat.%s.%s.txt", hostname, hostdate);
+	sprintf(addr_fname, "output/addr.%s.%s.csv", hostname, hostdate);
+	sprintf(stat_fname, "output/stat.%s.%s.txt", hostname, hostdate);
 
-//	if(stat("output", &st) == -1)
-  //  	if(mkdir("output", 0700) == -1){
-    //		fprintf(stderr, "error creating output directory\n");
-//			exit(EXIT_FAILURE);
- //   	}	
+	if(stat("output", &st) == -1)
+    	if(mkdir("output", 0700) == -1){
+    		fprintf(stderr, "error creating output directory\n");
+			exit(EXIT_FAILURE);
+    	}	
 	
 	if (PIN_Init(argc,argv)) {
 		printf("pintool error\n");
